@@ -1,0 +1,27 @@
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"text/template"
+)
+
+type e struct {
+	Name string
+	Add  string
+}
+
+func templateExample() {
+	tHandler := template.New("str")
+	content := "hello {{.Name}}"
+	tem, err := tHandler.Parse(content)
+	if err != nil {
+		fmt.Print(err)
+	}
+	mapString := ""
+	temReader := bytes.NewBufferString(mapString)
+	ee := e{Name: "joshua", Add: "haha"}
+	tem.Execute(temReader, ee)
+	fmt.Print(temReader.String())
+
+}

@@ -1,0 +1,21 @@
+{
+    "paths":{
+        "waterextraction":
+        {
+            "path":"waterextraction",
+            "modelPath":"watermodel",
+            "savePath":"predictj",
+            "outPath":"predictj/out",
+            "time":true,
+            "files":["input"],
+            "configFiles":false,
+            "configFile":"",
+            "configContent":[],
+            "commands":["watermodel/predict.py","--input={{.SaveFullPath}}","--output={{.OutputPath}}"]
+
+
+        }
+    }
+
+    
+}
