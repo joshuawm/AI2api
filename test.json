@@ -1,0 +1,18 @@
+{
+    "paths":{
+        "test":{
+            "path":"test",
+            "modelPath":"test",
+            "savePath":"saveResult",
+            "outPath":"outResult",
+            "Time":true,
+            "configFiles":false,
+            "configFile":"",
+            "commands":[
+                "test/test.py",
+                "--env={{.ModelPath}}",
+                "--from={{.easy}}"
+            ]
+        }
+    }
+}

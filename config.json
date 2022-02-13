@@ -7,7 +7,6 @@
             "savePath":"predictj",
             "outPath":"predictj/out",
             "time":true,
-            "files":["input"],
             "configFiles":false,
             "configFile":"",
             "configContent":[],
