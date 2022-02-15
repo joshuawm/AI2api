@@ -6,19 +6,21 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
-	"github.com/gorilla/websocket"
+
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
 type TrainConfig struct{
 	// your train files
 	TrainFile string  `json:"trainFile"`
+	TrainExtra []string `json:"trainExtra"`
 
 
 }
 
 var (
-	con websocket.Conn
+	cons map[string]*websocket.Conn	=make(map[string]*websocket.Conn)
 	upgrader websocket.Upgrader = websocket.Upgrader{
 		ReadBufferSize: 1024,
 		WriteBufferSize: 1024,
@@ -34,6 +36,7 @@ func train(w http.ResponseWriter,r *http.Request){
 		回去大礼包("train name 不存在",&w)
 		return
 	}
+	//get 
 	trainConfig := config.Trains[trainName]
 
 	var config []string
@@ -42,10 +45,12 @@ func train(w http.ResponseWriter,r *http.Request){
 	if configString==""{
 		configString=r.FormValue("config")
 	}
-	// if configString==""{
-	// 	回去大礼包("config string不存在",&w)
-	// 	return
-	// }
+	if configString==""{
+		return
+	}
+
+	// get all varaille
+
 	if configString!=""{
 		err :=json.Unmarshal([]byte(configString),&config)
 		if err!=nil{
@@ -56,8 +61,14 @@ func train(w http.ResponseWriter,r *http.Request){
 		config=[]string{}
 	}
 
+	con := cons[trainName]
+	if(con==nil){
+		回去大礼包("没有ws连接",&w)
+		return
+	}
+
 	
-	go func (trainFile TrainConfig,extraConfig []string){
+	go func (trainFile TrainConfig,extraConfig []string,con *websocket.Conn){
 		commandS := append([]string{trainFile.TrainFile},config...)
 		cmd:=exec.Command("python",commandS...)
 		stdout,err:=cmd.StdoutPipe()
@@ -79,14 +90,19 @@ func train(w http.ResponseWriter,r *http.Request){
 		}
 		con.WriteMessage(websocket.TextMessage,[]byte("train is ended"))
 		return
-	}(trainConfig,config)
+	}(trainConfig,config,con)
 
 	
 	
 }
 
 func ws(w http.ResponseWriter,r *http.Request){
+	name := mux.Vars(r)["room"]
+	if(name==""){
+		return
+	}
 	con,err  := upgrader.Upgrade(w,r,nil)
+	cons[name]=con
 	if err !=nil{
 		return
 	}
