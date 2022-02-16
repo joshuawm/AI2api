@@ -14,5 +14,15 @@
                 "--from={{.easy}}"
             ]
         }
+    },
+    "trains":{
+        "yolo":{
+            "trainFile":"yolov3_RS/train.py",
+            "trainExtra":[]
+        },
+        "mnist":{
+            "trainFile":"mnist/mnist-pytorch.py",
+            "trainExtra":[]
+        }
     }
 }

@@ -289,7 +289,9 @@ func stringSubstituting(contentArr []string, substitution interface{}) ([]string
 func internalErrorResponse(err error, w *http.ResponseWriter) {
 	wpu := *w
 	wpu.WriteHeader(http.StatusInternalServerError)
-	wpu.Write([]byte(err.Error()))
+	r := Response{Status: 0, Content: []string{}, Err: err.Error()}
+	t, _ := json.Marshal(r)
+	wpu.Write(t)
 }
 
 func 回去大礼包(why string, w *http.ResponseWriter) {
@@ -321,6 +323,5 @@ func main() {
 	r.HandleFunc("/train/{name}", train)
 	r.HandleFunc("/ws/{room}", ws)
 	http.Handle("/", r)
-	http.ListenAndServe(":8080", nil)
-
+	http.ListenAndServe(":8090", nil)
 }
