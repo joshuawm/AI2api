@@ -36,6 +36,9 @@ type path struct {
 	//file keys to retrive files from request
 	// Files []string `json:"files"`
 
+	//if we add the modelfolder when we create a env that with filepath
+	//
+	InsideFolder bool `json:"insiderfolder"`
 	//to determine whether to active the config file mode
 	ConfigFiles bool `json:"configFiles"`
 	//the same
@@ -47,7 +50,7 @@ type path struct {
 var config Config
 
 type Response struct {
-	Status  int8     `json:"status"`
+	Status  bool     `json:"status"`
 	Content []string `json:"content"`
 	Err     string   `json:"err"`
 }
@@ -132,6 +135,10 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 		SaveFullPath: filepath.Join(path.ModelPath, path.SavePath, folderName),
 		FolderName:   folderName,
 	}
+	if path.InsideFolder {
+		env.OutputPath = filepath.Join(path.OutPath, folderName)
+		env.SaveFullPath = filepath.Join(path.SavePath, folderName)
+	}
 
 	//save all files
 	if r.MultipartForm != nil {
@@ -203,6 +210,9 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 		return
 	}
 	comhandler := exec.Command("python", readyCommand...)
+	if path.InsideFolder {
+		comhandler.Dir = filepath.Join(comhandler.Dir, path.ModelPath)
+	}
 	logOut, err := comhandler.CombinedOutput()
 	if err != nil {
 		internalErrorResponse(err, &w)
@@ -267,6 +277,36 @@ func filesRecursive(dirPath string, root []string) []string {
 	return result
 }
 
+func filesRecursiveWithRelative(targetPath string, relativePath string, root []string) []string {
+	if len(root) == 0 {
+		//this is the first time, so initialize
+		root = filepath.SplitList(targetPath)
+	}
+	dirPath := filepath.Join(relativePath, targetPath)
+	result := []string{}
+	fEntery, err := os.ReadDir(dirPath)
+	if err != nil {
+		return []string{}
+	}
+	for _, fe := range fEntery {
+		if fe.IsDir() {
+			root = append(root, fe.Name())
+
+			resultTemp := filesRecursive(filepath.Join(root...), root)
+			result = append(result, resultTemp...)
+		} else {
+			t := append(root, fe.Name())
+			newCon, err := json.Marshal(t)
+			if err != nil {
+				fmt.Print(" %s 在序列化出错，已跳过", dirPath)
+			} else {
+				result = append(result, string(newCon))
+			}
+		}
+	}
+	return result
+}
+
 func stringSubstituting(contentArr []string, substitution interface{}) ([]string, error) {
 	temp := template.New("sysEnv")
 	var delim string = "[delim]"
@@ -289,14 +329,14 @@ func stringSubstituting(contentArr []string, substitution interface{}) ([]string
 func internalErrorResponse(err error, w *http.ResponseWriter) {
 	wpu := *w
 	wpu.WriteHeader(http.StatusInternalServerError)
-	r := Response{Status: 0, Content: []string{}, Err: err.Error()}
+	r := Response{Status: false, Content: []string{}, Err: err.Error()}
 	t, _ := json.Marshal(r)
 	wpu.Write(t)
 }
 
 func 回去大礼包(why string, w *http.ResponseWriter) {
 	wPupet := *w
-	c := Response{Status: 0, Err: why}
+	c := Response{Status: false, Err: why}
 	content, err := json.Marshal(c)
 	if err != nil {
 		wPupet.WriteHeader(http.StatusInternalServerError)
@@ -307,7 +347,7 @@ func 回去大礼包(why string, w *http.ResponseWriter) {
 }
 
 func main() {
-	f, err := os.ReadFile("test.json")
+	f, err := os.ReadFile("config.json")
 	if err != nil {
 		fmt.Print(err.Error())
 		os.Exit(0)
@@ -322,6 +362,9 @@ func main() {
 	r.HandleFunc("/predict/{name}", predict)
 	r.HandleFunc("/train/{name}", train)
 	r.HandleFunc("/ws/{room}", ws)
+	// r.HandleFunc("/cus/download", getAPetc)
+	// r.HandleFunc("/cus/getStatis", getAllModel)
+	// r.HandleFunc("/cus/list", listMyModels)
 	http.Handle("/", r)
 	http.ListenAndServe(":8090", nil)
 }

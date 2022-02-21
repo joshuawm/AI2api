@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -13,8 +14,10 @@ import (
 
 type TrainConfig struct {
 	// your train files. like  trqain.py yolo/train.py
-	TrainFile  string   `json:"trainFile"`
-	TrainExtra []string `json:"trainExtra"`
+	InsideFolder bool     `json:"insiderFolder"`
+	FolderName   string   `json:"folderName"`
+	TrainFile    string   `json:"trainFile"`
+	TrainExtra   []string `json:"trainExtra"`
 }
 
 var (
@@ -24,6 +27,7 @@ var (
 		WriteBufferSize: 1024,
 		CheckOrigin:     func(r *http.Request) bool { return true },
 	}
+	isActivate map[string]bool = make(map[string]bool)
 )
 
 func train(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +36,12 @@ func train(w http.ResponseWriter, r *http.Request) {
 	if trainName == "" {
 		回去大礼包("train name 不存在", &w)
 		return
+	}
+	if value, ok := isActivate[trainName]; ok {
+		if value {
+			回去大礼包("训练已开始", &w)
+			return
+		}
 	}
 	//get
 	trainConfig := config.Trains[trainName]
@@ -62,7 +72,7 @@ func train(w http.ResponseWriter, r *http.Request) {
 		回去大礼包("没有ws连接", &w)
 		return
 	}
-
+	isActivate[trainName] = true
 	go func(trainFile TrainConfig, extraConfig []string, con *websocket.Conn) {
 		commandS := append([]string{trainFile.TrainFile}, extraConfig...)
 		//redirect stderr and stdout to a file and make it run
@@ -70,7 +80,10 @@ func train(w http.ResponseWriter, r *http.Request) {
 
 		//combine stdout and stderr together
 		//https://stackoverflow.com/questions/35994907/go-combining-cmd-stdoutpipe-and-cmd-stderrpipe
-		cmd := exec.Command("python", commandS...)
+		cmd := exec.Command("/home/lzc/anaconda3/envs/lzcpy36/bin/python", commandS...)
+		if trainFile.InsideFolder {
+			cmd.Dir = filepath.Join(cmd.Dir, trainConfig.FolderName)
+		}
 		stdout, err := cmd.StdoutPipe()
 		cmd.Stderr = cmd.Stdout
 		if err != nil {
@@ -99,8 +112,9 @@ func train(w http.ResponseWriter, r *http.Request) {
 			line, _, err = read.ReadLine()
 		}
 		con.WriteMessage(websocket.TextMessage, []byte("train is ended"))
+		isActivate[trainName] = false
 	}(trainConfig, config, con)
-	t, _ := json.Marshal(Response{Status: 1, Content: []string{"success! train is starting"}, Err: ""})
+	t, _ := json.Marshal(Response{Status: true, Content: []string{"success! train is starting"}, Err: ""})
 	w.Write([]byte(t))
 }
 
