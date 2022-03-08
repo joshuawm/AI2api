@@ -14,10 +14,10 @@ import (
 
 type TrainConfig struct {
 	// your train files. like  trqain.py yolo/train.py
-	InsideFolder bool     `json:"insiderFolder"`
-	FolderName   string   `json:"folderName"`
-	TrainFile    string   `json:"trainFile"`
-	TrainExtra   []string `json:"trainExtra"`
+	InsideFolder bool   `json:"insiderFolder"`
+	FolderName   string `json:"folderName"`
+	TrainFile    string `json:"trainFile"`
+	// TrainExtra   []string `json:"trainExtra"` //deprecated!!
 }
 
 var (
@@ -80,7 +80,7 @@ func train(w http.ResponseWriter, r *http.Request) {
 
 		//combine stdout and stderr together
 		//https://stackoverflow.com/questions/35994907/go-combining-cmd-stdoutpipe-and-cmd-stderrpipe
-		cmd := exec.Command("/home/lzc/anaconda3/envs/lzcpy36/bin/python", commandS...)
+		cmd := exec.Command("/home/lsj/anaconda3/envs/JsrAerialDetection/bin/python", commandS...)
 		if trainFile.InsideFolder {
 			cmd.Dir = filepath.Join(cmd.Dir, trainConfig.FolderName)
 		}
@@ -112,7 +112,9 @@ func train(w http.ResponseWriter, r *http.Request) {
 			line, _, err = read.ReadLine()
 		}
 		con.WriteMessage(websocket.TextMessage, []byte("train is ended"))
+		fmt.Print("train is ended")
 		isActivate[trainName] = false
+		con.Close()
 	}(trainConfig, config, con)
 	t, _ := json.Marshal(Response{Status: true, Content: []string{"success! train is starting"}, Err: ""})
 	w.Write([]byte(t))
@@ -128,14 +130,15 @@ func ws(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	for {
-		msgType, msg, err := con.ReadMessage()
-		if err != nil {
-			continue
-		}
-		if msgType == websocket.TextMessage {
-			fmt.Print(string(msg))
-		}
-	}
+	// for {
+	// 	msgType, msg, err := con.ReadMessage()
+	// 	if err != nil {
+	// 		continue
+	// 	}
+	// 	if msgType == websocket.TextMessage {
+	// 		fmt.Println("receive message:")
+	// 		fmt.Println(string(msg))
+	// 	}
+	// }
 
 }

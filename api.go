@@ -135,14 +135,10 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 		SaveFullPath: filepath.Join(path.ModelPath, path.SavePath, folderName),
 		FolderName:   folderName,
 	}
-	if path.InsideFolder {
-		env.OutputPath = filepath.Join(path.OutPath, folderName)
-		env.SaveFullPath = filepath.Join(path.SavePath, folderName)
-	}
 
 	//save all files
+	r.ParseMultipartForm(10 << 10)
 	if r.MultipartForm != nil {
-		r.ParseMultipartForm(10 << 10)
 		for _, Files := range r.MultipartForm.File {
 			for _, v := range Files {
 				f, err := v.Open()
@@ -166,8 +162,8 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 	ee["ModelPath"] = env.ModelPath
 	ee["SavePath"] = env.SavePath
 	ee["OutPath"] = env.OutPath
-	ee["OutputPath"] = env.OutputPath
-	ee["SaveFullPath"] = env.SaveFullPath
+	ee["OutputPath"] = filepath.Join(path.OutPath, folderName)
+	ee["SaveFullPath"] = filepath.Join(path.SavePath, folderName)
 	ee["FolderName"] = env.FolderName
 	ee["ConfigFullFile"] = env.ConfigFullFile
 
@@ -209,11 +205,12 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 		internalErrorResponse(err, &w)
 		return
 	}
-	comhandler := exec.Command("python", readyCommand...)
+	comhandler := exec.Command("/home/lsj/anaconda3/envs/JsrAerialDetection/bin/python", readyCommand...)
 	if path.InsideFolder {
 		comhandler.Dir = filepath.Join(comhandler.Dir, path.ModelPath)
 	}
 	logOut, err := comhandler.CombinedOutput()
+	fmt.Print(string(logOut))
 	if err != nil {
 		internalErrorResponse(err, &w)
 		return
@@ -231,27 +228,17 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 	if _, err := os.Stat(env.OutputPath); os.IsNotExist(err) {
 		os.MkdirAll(env.OutputPath, os.ModePerm)
 	}
-	fileEntryy, err := os.ReadDir(env.OutputPath)
-	if err != nil {
-		internalErrorResponse(err, &w)
-		return
-	}
-	outFiles := []string{}
-	for _, fEntry := range fileEntryy {
-		if fEntry.IsDir() {
 
-		} else {
-			outFiles = append(outFiles, fEntry.Name())
-		}
-	}
+	content := filesRecursive(env.OutputPath, []string{})
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(fmt.Sprintf(`{"files":%s}`, outFiles)))
+	tempp, _ := json.Marshal(Response{Status: true, Content: content, Err: ""})
+	w.Write(tempp)
 }
 
 func filesRecursive(dirPath string, root []string) []string {
 	if len(root) == 0 {
 		//this is the first time, so initialize
-		root = filepath.SplitList(dirPath)
+		root = SplitPathIntoPaths(dirPath)
 	}
 	result := []string{}
 	fEntery, err := os.ReadDir(dirPath)
@@ -329,6 +316,7 @@ func stringSubstituting(contentArr []string, substitution interface{}) ([]string
 func internalErrorResponse(err error, w *http.ResponseWriter) {
 	wpu := *w
 	wpu.WriteHeader(http.StatusInternalServerError)
+	wpu.Header().Set("Content-Type", "application/json")
 	r := Response{Status: false, Content: []string{}, Err: err.Error()}
 	t, _ := json.Marshal(r)
 	wpu.Write(t)
@@ -336,6 +324,7 @@ func internalErrorResponse(err error, w *http.ResponseWriter) {
 
 func 回去大礼包(why string, w *http.ResponseWriter) {
 	wPupet := *w
+	wPupet.Header().Set("Content-Type", "application/json")
 	c := Response{Status: false, Err: why}
 	content, err := json.Marshal(c)
 	if err != nil {
@@ -362,9 +351,8 @@ func main() {
 	r.HandleFunc("/predict/{name}", predict)
 	r.HandleFunc("/train/{name}", train)
 	r.HandleFunc("/ws/{room}", ws)
-	// r.HandleFunc("/cus/download", getAPetc)
-	// r.HandleFunc("/cus/getStatis", getAllModel)
-	// r.HandleFunc("/cus/list", listMyModels)
+	r.HandleFunc("/utl/download", download)
+	r.HandleFunc("/utl/getfiles", getAllCfg)
 	http.Handle("/", r)
 	http.ListenAndServe(":8090", nil)
 }
