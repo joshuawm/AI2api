@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -69,4 +71,34 @@ func download(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Content-Type", mType)
 	rw.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(p)+`"`)
 	rw.Write(content)
+}
+
+func fileNameWithoutExtSliceNotation(fileName string) string {
+	return fileName[:len(fileName)-len(filepath.Ext(fileName))]
+}
+
+func rawSizeString2Size(rawString string) ([2]uint, error) {
+	// var size [2]uint = nil
+	size := [2]uint{0, 0}
+	// rawSizeString:= r.URL.Query().Get("size")
+	if rawString != "" {
+		sizeSplited := strings.Split(rawString, ",")
+		if len(sizeSplited) == 2 {
+
+			tempi, err := strconv.ParseUint(sizeSplited[0], 0, 32)
+			if err != nil {
+				return size, err
+			}
+			size[0] = uint(tempi)
+			tempj, err := strconv.ParseUint(sizeSplited[0], 0, 32)
+			if err != nil {
+				return size, err
+			}
+			size[1] = uint(tempj)
+			return size, nil
+		} else {
+			return nil, errors.New("length != 2")
+		}
+
+	}
 }

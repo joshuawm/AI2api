@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -39,15 +40,24 @@ type path struct {
 	//if we add the modelfolder when we create a env that with filepath
 	//
 	InsideFolder bool `json:"insiderfolder"`
+	//Use key as their save folder
+	KeyAsFolderName bool `json:"keyasfoldername"`
 	//to determine whether to active the config file mode
 	ConfigFiles bool `json:"configFiles"`
 	//the same
 	ConfigFile    string   `json:"configFile"`
 	ConfigContent []string `json:"configContent"`
 	RunCommand    []string `json:"commands"`
+	Weight        int      `json:"weight"`
 }
 
 var config Config
+
+const SERVER_LIMIT int = 100
+
+var SERVER_CURRENT_LOSS int = 0
+
+var mutex sync.Mutex
 
 type Response struct {
 	Status  bool     `json:"status"`
@@ -87,8 +97,13 @@ func configWriter(templateFilePath string, targetFilePath string, content []stri
 }
 
 func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
+	if SERVER_CURRENT_LOSS >= SERVER_LIMIT {
+		回去大礼包("服务器繁忙，稍后再试", &w)
+		return
+	}
 	vars := mux.Vars(r)
 	modelName := vars["name"]
+	fmt.Println(modelName)
 	if modelName == "" {
 		//妈呀，真的可以用中文做函数名
 		回去大礼包("没有传入模型ID", &w)
@@ -110,7 +125,7 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 		tim = strings.Replace(tim, ":", "", -1)
 		folderName = strings.Replace(tim, "-", "", -1)
 	} else {
-		folderName = r.URL.Query().Get("name")
+		folderName = r.URL.Query().Get("n   ame")
 		if folderName == "" {
 			回去大礼包("time设置为false，但是没有传入保存文件名字", &w)
 			return
@@ -137,15 +152,32 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 	}
 
 	//save all files
+	//parse size of crop size  from URL string
+	size, sizeErr := rawSizeString2Size(r.URL.Query().Get("size"))
+
 	r.ParseMultipartForm(10 << 10)
 	if r.MultipartForm != nil {
-		for _, Files := range r.MultipartForm.File {
+		for key, Files := range r.MultipartForm.File {
+			var SavePathFolder string
+			if path.KeyAsFolderName {
+				SavePathFolder = filepath.Join(env.SaveFullPath, key)
+				if _, e := os.Stat(SavePathFolder); errors.Is(e, os.ErrNotExist) {
+					os.Mkdir(SavePathFolder, 0764)
+				}
+			} else {
+				SavePathFolder = env.SaveFullPath
+			}
 			for _, v := range Files {
 				f, err := v.Open()
 				if err != nil {
 					internalErrorResponse(err, &w)
 				}
-				ff, err := os.OpenFile(filepath.Join(env.SaveFullPath, v.Filename), os.O_CREATE|os.O_WRONLY, 0777)
+				if sizeErr == nil {
+					// you need to crop the image
+					CropImageMan(f, size, filepath.Join(SavePathFolder, fileNameWithoutExtSliceNotation(v.Filename)))
+					continue
+				}
+				ff, err := os.OpenFile(filepath.Join(SavePathFolder, v.Filename), os.O_CREATE|os.O_WRONLY, 0764)
 				if err != nil {
 					internalErrorResponse(err, &w)
 				}
@@ -162,11 +194,16 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 	ee["ModelPath"] = env.ModelPath
 	ee["SavePath"] = env.SavePath
 	ee["OutPath"] = env.OutPath
-	ee["OutputPath"] = filepath.Join(path.OutPath, folderName)
-	ee["SaveFullPath"] = filepath.Join(path.SavePath, folderName)
+	if path.InsideFolder {
+		ee["OutputPath"] = filepath.Join(path.OutPath, folderName)
+		ee["SaveFullPath"] = filepath.Join(path.SavePath, folderName)
+	} else {
+		ee["OutputPath"] = filepath.Join(path.ModelPath, path.OutPath, folderName)
+		ee["SaveFullPath"] = filepath.Join(path.ModelPath, path.SavePath, folderName)
+	}
 	ee["FolderName"] = env.FolderName
 	ee["ConfigFullFile"] = env.ConfigFullFile
-
+	fmt.Print(ee["OutputPath"])
 	if urlPar := r.URL.Query(); len(urlPar) > 0 {
 
 		for k, v := range urlPar {
@@ -205,11 +242,21 @@ func predict(w http.ResponseWriter, r *http.Request) { //Method:POST
 		internalErrorResponse(err, &w)
 		return
 	}
-	comhandler := exec.Command("/home/lsj/anaconda3/envs/JsrAerialDetection/bin/python", readyCommand...)
+	comhandler := exec.Command("/home/joshua/joshua/.pyenv/versions/miniconda3-4.7.12/bin/conda", readyCommand...)
 	if path.InsideFolder {
 		comhandler.Dir = filepath.Join(comhandler.Dir, path.ModelPath)
 	}
+
+	//Start Running
+	mutex.Lock()
+	SERVER_CURRENT_LOSS = SERVER_CURRENT_LOSS + path.Weight
+	mutex.Unlock()
 	logOut, err := comhandler.CombinedOutput()
+	mutex.Lock()
+	SERVER_CURRENT_LOSS = SERVER_CURRENT_LOSS - path.Weight
+	mutex.Unlock()
+	//End
+
 	fmt.Print(string(logOut))
 	if err != nil {
 		internalErrorResponse(err, &w)
@@ -346,13 +393,14 @@ func main() {
 		fmt.Print(err.Error())
 		os.Exit(0)
 	}
-	fmt.Print(config)
+	fmt.Println(config)
 	r := mux.NewRouter()
 	r.HandleFunc("/predict/{name}", predict)
 	r.HandleFunc("/train/{name}", train)
 	r.HandleFunc("/ws/{room}", ws)
 	r.HandleFunc("/utl/download", download)
 	r.HandleFunc("/utl/getfiles", getAllCfg)
+	// r.HandleFunc("/test/crop", TestImageCrop).Methods("POST")
 	http.Handle("/", r)
 	http.ListenAndServe(":8090", nil)
 }
